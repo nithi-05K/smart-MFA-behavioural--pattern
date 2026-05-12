@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart MFA — Secure Access</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --danger: #ff3b6b;
+    --success: #00e5a0;
+    --warn: #ffd166;
+    --glass-bg: rgba(10, 12, 28, 0.72);
+    --glass-border: rgba(0, 229, 255, 0.15);
+    --surface: rgba(255,255,255,0.04);
+    --text: #e8eaf6;
+    --muted: rgba(200,210,255,0.45);
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #040610;
+    font-family: 'Syne', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+  }
+  .bg-orb1 {
+    position: fixed; z-index: 0; width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 70%);
+    top: -150px; left: -150px; animation: driftA 18s ease-in-out infinite alternate;
+  }
+  .bg-orb2 {
+    position: fixed; z-index: 0; width: 500px; height: 500px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,255,0.15) 0%, transparent 70%);
+    bottom: -120px; right: -100px; animation: driftB 22s ease-in-out infinite alternate;
+  }
+  .bg-orb3 {
+    position: fixed; z-index: 0; width: 300px; height: 300px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,59,107,0.1) 0%, transparent 70%);
+    top: 50%; right: 20%; animation: driftC 14s ease-in-out infinite alternate;
+  }
+  @keyframes driftA { from{transform:translate(0,0);} to{transform:translate(60px,80px);} }
+  @keyframes driftB { from{transform:translate(0,0);} to{transform:translate(-40px,-60px);} }
+  @keyframes driftC { from{transform:translate(0,0);} to{transform:translate(30px,-40px);} }
+
+  canvas#particles { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+  .card {
+    position: relative; z-index: 10; width: 440px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    border-radius: 24px; padding: 44px 40px 40px;
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.06) inset, 0 40px 80px rgba(0,0,0,0.6), 0 0 80px rgba(0,229,255,0.06);
+    animation: cardIn 0.8s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes cardIn {
+    from { opacity:0; transform:translateY(32px) scale(0.97); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+  .card::before, .card::after {
+    content:''; position:absolute; width:20px; height:20px;
+    border-color:var(--accent); border-style:solid;
+  }
+  .card::before { top:16px; left:16px; border-width:2px 0 0 2px; border-radius:4px 0 0 0; }
+  .card::after  { bottom:16px; right:16px; border-width:0 2px 2px 0; border-radius:0 0 4px 0; }
+
+  .header { text-align:center; margin-bottom:36px; }
+  .logo-ring {
+    width:72px; height:72px; margin:0 auto 18px; border-radius:50%;
+    border:1.5px solid var(--glass-border); background:rgba(0,229,255,0.06);
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  .logo-ring::before {
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border:1px solid transparent;
+    border-top-color:var(--accent); border-right-color:var(--accent2);
+    animation:spinRing 3s linear infinite;
+  }
+  @keyframes spinRing { to { transform:rotate(360deg); } }
+  .lock-icon { font-size:28px; }
+  .header h1 { font-size:22px; font-weight:800; letter-spacing:-0.5px; color:#fff; }
+  .header p  { font-size:12px; color:var(--muted); margin-top:5px; font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; }
+
+  .scan-line { height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); margin:0 -40px 28px; opacity:0.4; }
+
+  .field-group { margin-bottom:16px; }
+  label { display:block; font-size:11px; font-family:'DM Mono',monospace; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+
+  input[type="text"], input[type="password"], input[type="tel"] {
+    width:100%; padding:13px 16px; background:var(--surface);
+    border:1px solid rgba(0,229,255,0.12); border-radius:10px;
+    color:#fff; font-size:14px; font-family:'Syne',sans-serif;
+    outline:none; transition:border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  }
+  input::placeholder { color:rgba(200,210,255,0.25); }
+  input:focus { border-color:rgba(0,229,255,0.45); background:rgba(0,229,255,0.05); box-shadow:0 0 0 3px rgba(0,229,255,0.1); }
+
+  .pw-wrapper { position:relative; }
+
+  /* ── CPM Chip ── */
+  .cpm-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'DM Mono',monospace; font-size:11px; color:var(--muted);
+    margin-top:8px; padding:3px 10px; background:var(--surface);
+    border:1px solid rgba(255,255,255,0.07); border-radius:20px;
+  }
+  .cpm-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); }
+  .cpm-chip.active .cpm-dot { background:var(--accent); animation:pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  /* ── REAL-TIME RISK METER ── */
+  .risk-meter {
+    margin-top: 16px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(0,229,255,0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .risk-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .risk-label {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted);
+  }
+  .risk-badge {
+    font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600;
+    padding: 2px 10px; border-radius: 20px;
+    background: rgba(200,210,255,0.08); color: var(--muted);
+    transition: all 0.4s;
+  }
+  .risk-badge.low    { background:rgba(0,229,160,0.15); color:var(--success); }
+  .risk-badge.medium { background:rgba(255,209,102,0.15); color:var(--warn); }
+  .risk-badge.high   { background:rgba(255,59,107,0.15); color:var(--danger); }
+
+  /* Segmented bar */
+  .risk-bar-track {
+    display: flex; gap: 3px; margin-bottom: 10px;
+  }
+  .risk-seg {
+    flex: 1; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    transition: background 0.3s, transform 0.3s;
+  }
+  .risk-seg.lit-green  { background: var(--success); }
+  .risk-seg.lit-yellow { background: var(--warn); }
+  .risk-seg.lit-red    { background: var(--danger); transform: scaleY(1.4); }
+
+  /* Reason tags */
+  .risk-reasons {
+    display: flex; flex-wrap: wrap; gap: 6px; min-height: 22px;
+  }
+  .risk-tag {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    padding: 3px 8px; border-radius: 6px;
+    background: rgba(255,59,107,0.1); border: 1px solid rgba(255,59,107,0.2);
+    color: var(--danger);
+    animation: tagIn 0.3s ease both;
+  }
+  .risk-tag.ok {
+    background: rgba(0,229,160,0.1); border-color: rgba(0,229,160,0.2);
+    color: var(--success);
+  }
+  @keyframes tagIn { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
+
+  /* ── Paste Warning Banner ── */
+  .paste-warning {
+    display: none; margin-top: 10px;
+    padding: 10px 14px; border-radius: 10px;
+    background: rgba(255,59,107,0.12); border: 1px solid rgba(255,59,107,0.3);
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--danger);
+    animation: fadeUp 0.3s ease both;
+    align-items: center; gap: 8px;
+  }
+  .paste-warning.visible { display: flex; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+
+  .btn-primary {
+    width:100%; padding:15px; margin-top:20px;
+    background:linear-gradient(135deg,rgba(0,229,255,0.18),rgba(124,58,237,0.18));
+    border:1px solid rgba(0,229,255,0.3); border-radius:12px;
+    color:#fff; font-size:15px; font-weight:700; font-family:'Syne',sans-serif;
+    letter-spacing:0.5px; cursor:pointer; position:relative; overflow:hidden; transition:all 0.3s;
+  }
+  .btn-primary::before {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(135deg,rgba(0,229,255,0.25),rgba(124,58,237,0.25));
+    opacity:0; transition:opacity 0.3s;
+  }
+  .btn-primary:hover::before { opacity:1; }
+  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 8px 30px rgba(0,229,255,0.2); }
+  .btn-primary:active { transform:translateY(0); }
+  .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+
+  .loader-wrap { text-align:center; padding:16px 0; display:none; }
+  .loader-bar { height:2px; background:linear-gradient(90deg,var(--accent2),var(--accent),var(--accent2)); background-size:200% 100%; border-radius:2px; animation:barLoad 1.2s linear infinite; }
+  @keyframes barLoad { 0%{background-position:0% 0;} 100%{background-position:200% 0;} }
+  .loader-text { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:1px; margin-top:10px; }
+
+  .status-msg { margin-top:16px; padding:12px 16px; border-radius:10px; font-size:13px; font-family:'DM Mono',monospace; display:none; animation:fadeUp 0.3s ease both; }
+  .status-msg.success { background:rgba(0,229,160,0.1); border:1px solid rgba(0,229,160,0.25); color:var(--success); }
+  .status-msg.error   { background:rgba(255,59,107,0.1); border:1px solid rgba(255,59,107,0.25); color:var(--danger); }
+  .status-msg.warn    { background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.25); color:var(--warn); }
+
+  /* ── OTP ── */
+  .otp-overlay {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(4,6,16,0.85); backdrop-filter:blur(8px);
+    align-items:center; justify-content:center;
+  }
+  .otp-overlay.visible { display:flex; }
+  .otp-box {
+    background:rgba(10,12,28,0.95); border:1px solid rgba(0,229,255,0.2);
+    border-radius:20px; padding:40px 36px; width:340px; text-align:center;
+    box-shadow:0 40px 100px rgba(0,0,0,0.7);
+    animation:cardIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .otp-box h2 { font-size:18px; font-weight:700; color:#fff; margin-bottom:6px; }
+  .otp-box p  { font-size:12px; font-family:'DM Mono',monospace; color:var(--muted); margin-bottom:28px; }
+  .otp-inputs { display:flex; gap:12px; justify-content:center; margin-bottom:24px; }
+  .otp-digit {
+    width:56px; height:64px; text-align:center; font-size:26px; font-weight:700;
+    font-family:'Syne',sans-serif; background:var(--surface);
+    border:1px solid rgba(0,229,255,0.15); border-radius:12px;
+    color:#fff; outline:none; transition:all 0.2s; caret-color:var(--accent);
+  }
+  .otp-digit:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,229,255,0.15); background:rgba(0,229,255,0.06); }
+  .timer-ring-wrap { display:flex; align-items:center; justify-content:center; position:relative; width:48px; height:48px; margin:0 auto 20px; }
+  .timer-ring { transform:rotate(-90deg); }
+  .timer-ring-bg  { fill:none; stroke:rgba(255,255,255,0.07); stroke-width:4; }
+  .timer-ring-fill { fill:none; stroke:var(--accent); stroke-width:4; stroke-linecap:round; stroke-dasharray:100.53; stroke-dashoffset:0; transition:stroke-dashoffset 1s linear, stroke 0.5s; }
+  .timer-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-family:'DM Mono',monospace; font-size:14px; font-weight:600; color:var(--accent); }
+  .btn-otp { width:100%; padding:13px; background:linear-gradient(135deg,rgba(0,229,255,0.2),rgba(124,58,237,0.2)); border:1px solid rgba(0,229,255,0.3); border-radius:10px; color:#fff; font-size:14px; font-weight:700; font-family:'Syne',sans-serif; cursor:pointer; transition:all 0.2s; margin-top:16px; }
+  .btn-otp:hover { box-shadow:0 4px 20px rgba(0,229,255,0.15); transform:translateY(-1px); }
+
+  /* ── ACCESS GRANTED SCREEN ── */
+  #accessScreen {
+    display:none; position:fixed; inset:0; z-index:200;
+    background:#040610;
+    flex-direction:column; align-items:center; justify-content:center;
+    overflow:hidden;
+  }
+  #accessScreen.show { display:flex; }
+  #matrixCanvas { position:absolute; inset:0; z-index:0; opacity:0; transition:opacity 1s; }
+  #matrixCanvas.show { opacity:0.18; }
+  .shield-wrap {
+    position:relative; z-index:10;
+    display:flex; flex-direction:column; align-items:center;
+    opacity:0; transform:scale(0.5);
+    transition:opacity 0.6s, transform 0.6s cubic-bezier(0.16,1,0.3,1);
+  }
+  .shield-wrap.show { opacity:1; transform:scale(1); }
+  .shield-svg { width:120px; height:120px; filter:drop-shadow(0 0 24px rgba(0,229,255,0.6)); }
+  .pulse-rings { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:120px; height:120px; }
+  .pulse-ring { position:absolute; inset:0; border-radius:50%; border:2px solid rgba(0,229,255,0.5); animation:ringOut 2s ease-out infinite; }
+  .pulse-ring:nth-child(2) { animation-delay:0.5s; }
+  .pulse-ring:nth-child(3) { animation-delay:1s; }
+  @keyframes ringOut { 0%{transform:scale(1);opacity:0.8;} 100%{transform:scale(2.8);opacity:0;} }
+  .access-title { margin-top:32px; font-size:36px; font-weight:800; letter-spacing:4px; text-transform:uppercase; color:#fff; text-align:center; opacity:0; transform:translateY(20px); transition:opacity 0.5s 0.4s, transform 0.5s 0.4s; }
+  .access-title.show { opacity:1; transform:translateY(0); }
+  .access-title span { color:var(--accent); }
+  .access-sub { font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); letter-spacing:3px; text-transform:uppercase; margin-top:8px; text-align:center; opacity:0; transition:opacity 0.5s 0.7s; }
+  .access-sub.show { opacity:1; }
+  .sweep-line { position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); top:-4px; z-index:5; opacity:0; }
+  .sweep-line.run { opacity:1; animation:sweep 1.8s ease-in-out forwards; }
+  @keyframes sweep { 0%{top:0%;opacity:1;} 100%{top:100%;opacity:0.3;} }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:40px; width:480px; z-index:10; opacity:0; transform:translateY(24px); transition:opacity 0.5s 1s, transform 0.5s 1s; }
+  .stats-grid.show { opacity:1; transform:translateY(0); }
+  .stat-card { background:rgba(255,255,255,0.04); border:1px solid rgba(0,229,255,0.1); border-radius:14px; padding:16px 12px; text-align:center; position:relative; overflow:hidden; }
+  .stat-card::before { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent2),var(--accent)); }
+  .stat-icon { font-size:20px; margin-bottom:8px; }
+  .stat-val  { font-size:22px; font-weight:800; color:var(--accent); }
+  .stat-lbl  { font-size:10px; font-family:'DM Mono',monospace; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:4px; }
+
+  .session-log { z-index:10; width:480px; margin-top:16px; background:rgba(0,0,0,0.3); border:1px solid rgba(0,229,255,0.08); border-radius:12px; padding:14px 18px; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); opacity:0; transition:opacity 0.5s 1.3s; line-height:1.9; }
+  .session-log.show { opacity:1; }
+  .log-line { display:flex; gap:10px; }
+  .log-key { color:rgba(0,229,255,0.5); min-width:110px; }
+  .log-val { color:#fff; }
+  .log-cursor { display:inline-block; width:6px; height:13px; background:var(--accent); margin-left:4px; animation:blink 1s infinite; vertical-align:middle; }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+
+  .btn-logout { z-index:10; margin-top:24px; padding:10px 28px; background:transparent; border:1px solid rgba(255,59,107,0.3); border-radius:8px; color:var(--danger); font-family:'DM Mono',monospace; font-size:12px; letter-spacing:1px; cursor:pointer; opacity:0; transition:opacity 0.5s 1.6s, background 0.2s, box-shadow 0.2s; }
+  .btn-logout.show { opacity:1; }
+  .btn-logout:hover { background:rgba(255,59,107,0.1); box-shadow:0 0 20px rgba(255,59,107,0.2); }
+</style>
+</head>
+<body>
+
+<div class="bg-orb1"></div>
+<div class="bg-orb2"></div>
+<div class="bg-orb3"></div>
+<div class="bg-grid"></div>
+<canvas id="particles"></canvas>
+
+<!-- LOGIN CARD -->
+<div class="card" id="loginCard">
+  <div class="header">
+    <div class="logo-ring"><span class="lock-icon">🔐</span></div>
+    <h1>Smart MFA</h1>
+    <p>Behavioral · Biometric · Secure</p>
+  </div>
+  <div class="scan-line"></div>
+
+  <div class="field-group">
+    <label>Phone Number</label>
+    <input type="tel" id="phone" value="+918610782755">
+  </div>
+  <div class="field-group">
+    <label>Username</label>
+    <input type="text" id="username" placeholder="Enter your username">
+  </div>
+  <div class="field-group">
+    <label>Password</label>
+    <div class="pw-wrapper">
+      <input type="password" id="password" placeholder="Enter your password" autocomplete="off">
+    </div>
+    <div class="cpm-chip" id="cpmChip">
+      <div class="cpm-dot"></div>
+      <span id="cpmDisplay">Awaiting input…</span>
+    </div>
+  </div>
+
+  <!-- Paste Warning -->
+  <div class="paste-warning" id="pasteWarning">
+    ⚠ Copy-paste detected — manual typing required for behavioral analysis
+  </div>
+
+  <!-- Real-time Risk Meter -->
+  <div class="risk-meter" id="riskMeter">
+    <div class="risk-header">
+      <span class="risk-label">Live Risk Analysis</span>
+      <span class="risk-badge" id="riskBadge">IDLE</span>
+    </div>
+    <div class="risk-bar-track" id="riskBarTrack">
+      <!-- 10 segments filled by JS -->
+    </div>
+    <div class="risk-reasons" id="riskReasons"></div>
+  </div>
+
+  <button class="btn-primary" id="loginBtn" onclick="verify()">Authenticate Securely</button>
+  <div class="loader-wrap" id="loader">
+    <div class="loader-bar"></div>
+    <div class="loader-text">Analyzing behavioral patterns…</div>
+  </div>
+  <div class="status-msg" id="statusMsg"></div>
+</div>
+
+<!-- OTP OVERLAY -->
+<div class="otp-overlay" id="otpOverlay">
+  <div class="otp-box">
+    <h2>OTP Verification</h2>
+    <p>Code sent to your registered phone</p>
+    <div class="otp-inputs" id="otpInputs">
+      <input class="otp-digit" maxlength="1" type="text" inputmode="numeric">
+      <input class="otp-digit" maxlength="1" type="text" inputmode="numeric">
+      <input class="otp-digit" maxlength="1" type="text" inputmode="numeric">
+      <input class="otp-digit" maxlength="1" type="text" inputmode="numeric">
+    </div>
+    <div class="timer-ring-wrap">
+      <svg class="timer-ring" width="48" height="48" viewBox="0 0 48 48">
+        <circle class="timer-ring-bg" cx="24" cy="24" r="16"/>
+        <circle class="timer-ring-fill" id="timerArc" cx="24" cy="24" r="16"/>
+      </svg>
+      <span class="timer-label" id="otpCountdown">20</span>
+    </div>
+    <button class="btn-otp" onclick="submitOTP()">Verify OTP</button>
+  </div>
+</div>
+
+<!-- ACCESS GRANTED SCREEN -->
+<div id="accessScreen">
+  <canvas id="matrixCanvas"></canvas>
+  <div class="sweep-line" id="sweepLine"></div>
+  <div class="pulse-rings">
+    <div class="pulse-ring"></div>
+    <div class="pulse-ring"></div>
+    <div class="pulse-ring"></div>
+  </div>
+  <div class="shield-wrap" id="shieldWrap">
+    <svg class="shield-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M50 8 L88 22 L88 50 C88 70 70 86 50 94 C30 86 12 70 12 50 L12 22 Z" fill="rgba(0,229,255,0.08)" stroke="#00e5ff" stroke-width="2.5"/>
+      <path d="M50 20 L78 31 L78 50 C78 65 65 78 50 85 C35 78 22 65 22 50 L22 31 Z" fill="rgba(0,229,255,0.05)" stroke="rgba(0,229,255,0.4)" stroke-width="1"/>
+      <path d="M34 50 L44 62 L66 38" stroke="#00e5ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="access-title" id="accessTitle">Access <span>Granted</span></div>
+    <div class="access-sub" id="accessSub">Identity Verified · Session Secured · Encrypted</div>
+  </div>
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-val" id="statCpm">—</div>
+      <div class="stat-lbl">Typing Speed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🛡</div>
+      <div class="stat-val" id="statThreat">—</div>
+      <div class="stat-lbl">Threat Level</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🔑</div>
+      <div class="stat-val" id="statMethod">—</div>
+      <div class="stat-lbl">Auth Method</div>
+    </div>
+  </div>
+  <div class="session-log" id="sessionLog">
+    <div class="log-line"><span class="log-key">SESSION ID</span><span class="log-val" id="logSid">—</span></div>
+    <div class="log-line"><span class="log-key">TIMESTAMP</span><span class="log-val" id="logTime">—</span></div>
+    <div class="log-line"><span class="log-key">IP ADDRESS</span><span class="log-val">192.168.1.1 <span style="color:var(--success);font-size:10px;">● TRUSTED</span></span></div>
+    <div class="log-line"><span class="log-key">ENCRYPTION</span><span class="log-val">AES-256-GCM<span class="log-cursor"></span></span></div>
+  </div>
+  <button class="btn-logout" id="btnLogout" onclick="logout()">⏻ &nbsp;END SESSION</button>
+</div>
+
+<script>
+// ── Particles ──────────────────────────────────────────────────────
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+for (let i = 0; i < 60; i++) particles.push({
+  x:Math.random()*canvas.width, y:Math.random()*canvas.height,
+  vx:(Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.3,
+  r:Math.random()*1.5+0.3, alpha:Math.random()*0.5+0.1
+});
+(function drawP() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  particles.forEach(p => {
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0)p.x=canvas.width; if(p.x>canvas.width)p.x=0;
+    if(p.y<0)p.y=canvas.height; if(p.y>canvas.height)p.y=0;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(0,229,255,${p.alpha})`; ctx.fill();
+  });
+  for(let i=0;i<particles.length;i++) for(let j=i+1;j<particles.length;j++){
+    const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<120){
+      ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y);
+      ctx.lineTo(particles[j].x,particles[j].y);
+      ctx.strokeStyle=`rgba(0,229,255,${0.06*(1-d/120)})`; ctx.lineWidth=0.5; ctx.stroke();
+    }
+  }
+  requestAnimationFrame(drawP);
+})();
+
+// ── Matrix Rain ────────────────────────────────────────────────────
+const mc = document.getElementById('matrixCanvas');
+const mctx = mc.getContext('2d');
+let matrixRAF = null, matrixDrops = [];
+const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ01';
+function startMatrix() {
+  mc.width = window.innerWidth; mc.height = window.innerHeight;
+  const cols = Math.floor(mc.width / 18);
+  matrixDrops = Array(cols).fill(1);
+  mc.classList.add('show');
+  function draw() {
+    mctx.fillStyle = 'rgba(4,6,16,0.05)';
+    mctx.fillRect(0,0,mc.width,mc.height);
+    matrixDrops.forEach((y,i) => {
+      const ch = CHARS[Math.floor(Math.random()*CHARS.length)];
+      mctx.fillStyle = y===1 ? '#fff' : `rgba(0,229,255,${Math.random()*0.5+0.2})`;
+      mctx.font = '14px DM Mono, monospace';
+      mctx.fillText(ch, i*18, y*18);
+      if(y*18 > mc.height && Math.random() > 0.975) matrixDrops[i] = 0;
+      matrixDrops[i]++;
+    });
+    matrixRAF = requestAnimationFrame(draw);
+  }
+  draw();
+}
+function stopMatrix() {
+  mc.classList.remove('show');
+  if(matrixRAF) cancelAnimationFrame(matrixRAF);
+  mctx.clearRect(0,0,mc.width,mc.height);
+}
+
+// ── Build Risk Bar Segments ────────────────────────────────────────
+const TOTAL_SEGS = 10;
+const track = document.getElementById('riskBarTrack');
+for (let i = 0; i < TOTAL_SEGS; i++) {
+  const s = document.createElement('div');
+  s.className = 'risk-seg';
+  track.appendChild(s);
+}
+
+// ── Risk Meter Update ──────────────────────────────────────────────
+function updateRiskMeter(cpm, dwellAvg, flightAvg, pasteDetected) {
+  const segs = track.querySelectorAll('.risk-seg');
+  const badge = document.getElementById('riskBadge');
+  const reasons = document.getElementById('riskReasons');
+
+  // Calculate risk score 0–10
+  let score = 0;
+  let reasonList = [];
+
+  if (pasteDetected) {
+    score += 5;
+    reasonList.push({ text: '📋 Paste detected', bad: true });
+  }
+  if (cpm > 0 && cpm < 40) {
+    score += 3;
+    reasonList.push({ text: `⚡ CPM ${cpm.toFixed(0)} — too slow`, bad: true });
+  } else if (cpm >= 40 && cpm <= 120) {
+    score -= 1;
+    reasonList.push({ text: `⚡ CPM ${cpm.toFixed(0)} — normal`, bad: false });
+  } else if (cpm > 120) {
+    score -= 1;
+    reasonList.push({ text: `⚡ CPM ${cpm.toFixed(0)} — fast`, bad: false });
+  }
+  if (dwellAvg > 300) {
+    score += 2;
+    reasonList.push({ text: `⌛ Dwell ${dwellAvg.toFixed(0)}ms — hesitant`, bad: true });
+  }
+  if (flightAvg > 500) {
+    score += 2;
+    reasonList.push({ text: `✈ Flight ${flightAvg.toFixed(0)}ms — pausing`, bad: true });
+  }
+  score = Math.max(0, Math.min(10, score));
+  // Light up segments
+  segs.forEach((s, i) => {
+    s.className = 'risk-seg';
+    if (i < score) {
+      if (score <= 3)      s.classList.add('lit-green');
+      else if (score <= 6) s.classList.add('lit-yellow');
+      else                 s.classList.add('lit-red');
+    }
+  });
+  // Badge
+  if (score <= 3) {
+    badge.textContent = 'LOW'; badge.className = 'risk-badge low';
+  } else if (score <= 6) {
+    badge.textContent = 'MEDIUM'; badge.className = 'risk-badge medium';
+  } else {
+    badge.textContent = 'HIGH'; badge.className = 'risk-badge high';
+  }
+  // Reason tags
+  reasons.innerHTML = '';
+  reasonList.forEach(r => {
+    const tag = document.createElement('span');
+    tag.className = r.bad ? 'risk-tag' : 'risk-tag ok';
+    tag.textContent = r.text;
+    reasons.appendChild(tag);
+  });
+  return score;
+}
+// ── Keystroke Dynamics ─────────────────────────────────────────────
+let startTime, lastKeyTime, dwellTimes=[], flightTimes=[], keyCount=0;
+let finalCpm=0, pasteDetected=false;
+const pwInput = document.getElementById('password');
+// Copy-Paste Detection
+pwInput.addEventListener('paste', e => {
+  e.preventDefault(); // block the paste
+  pasteDetected = true;
+  document.getElementById('pasteWarning').classList.add('visible');
+  // Force clear field so they must type manually
+  setTimeout(() => { pwInput.value = ''; }, 10);
+  updateRiskMeter(finalCpm, avg(dwellTimes), avg(flightTimes), true);
+});
+pwInput.addEventListener('keydown', e => {
+  const now = Date.now();
+  if(keyCount===0) startTime=now; else flightTimes.push(now-lastKeyTime);
+  lastKeyTime=now;
+  document.getElementById('cpmChip').classList.add('active');
+});
+pwInput.addEventListener('keyup', () => {
+  const now = Date.now();
+  dwellTimes.push(now-lastKeyTime);
+  keyCount++;
+  const elapsed = (Date.now()-startTime)/1000;
+  finalCpm = elapsed>0 ? (keyCount/elapsed)*60 : 0;
+  document.getElementById('cpmDisplay').textContent = `CPM: ${finalCpm.toFixed(0)}`;
+  updateRiskMeter(finalCpm, avg(dwellTimes), avg(flightTimes), pasteDetected);
+});
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function showStatus(msg, type) {
+  const el = document.getElementById('statusMsg');
+  el.textContent=msg; el.className=`status-msg ${type}`; el.style.display='block';
+}
+// ── Verify ─────────────────────────────────────────────────────────
+function verify() {
+  const btn=document.getElementById('loginBtn');
+  const loader=document.getElementById('loader');
+  btn.disabled=true; loader.style.display='block';
+  document.getElementById('statusMsg').style.display='none';
+  const phone=document.getElementById('phone').value;
+  if(keyCount < 4) {
+    loader.style.display='none'; btn.disabled=false;
+    showStatus('⚠ Please type your password to analyze behavior','warn');
+    return;
+  }
+  const totalTime = (Date.now()-startTime)/1000;
+  const cpm = (keyCount/totalTime)*60;
+  finalCpm = cpm;
+  const dwellAvg  = avg(dwellTimes);
+  const flightAvg = avg(flightTimes);
+  // Suspicious: paste detected OR slow CPM OR hesitant dwell OR long flight
+  const isSuspicious = pasteDetected || cpm < 40 || dwellAvg > 300 || flightAvg > 500;
+  const data = {
+    cpm, dwell_avg:dwellAvg, flight_avg:flightAvg,
+    pressure_touch:0.5, scroll_x:window.scrollX, scroll_y:window.scrollY, tilt_angle:30
+  };
+  fetch('http://localhost:5000/predict', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+  })
+  .then(r=>r.json())
+  .then(()=>{
+    loader.style.display='none';
+    if(isSuspicious) {
+      showStatus('⚠ Behavioral anomaly detected — OTP required','warn');
+      fetch('http://localhost:5000/send_otp', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})
+      }).then(()=>openOTP(phone));
+    } else {
+      showDashboard('Behavioral');
+    }
+  })
+  .catch(()=>{
+    loader.style.display='none'; btn.disabled=false;
+    showStatus('⚠ Backend unreachable — check Flask server','error');
+  });
+}
+// ── OTP ────────────────────────────────────────────────────────────
+let otpPhone='', otpTimer=null;
+const TOTAL_SECONDS=20, CIRCUMFERENCE=2*Math.PI*16;
+function openOTP(phone) {
+  otpPhone=phone;
+  document.getElementById('otpOverlay').classList.add('visible');
+  const container=document.getElementById('otpInputs');
+  container.querySelectorAll('.otp-digit').forEach(d=>{
+    const f=d.cloneNode(true); d.parentNode.replaceChild(f,d);
+  });
+  const digits=container.querySelectorAll('.otp-digit');
+  digits.forEach((d,i)=>{
+    d.value='';
+    d.addEventListener('input',()=>{
+      d.value=d.value.replace(/[^0-9]/g,'').slice(-1);
+      if(d.value && i<digits.length-1) digits[i+1].focus();
+    });
+    d.addEventListener('keydown',e=>{
+      if(e.key==='Backspace' && !d.value && i>0) digits[i-1].focus();
+    });
+  });
+  digits[0].focus();
+  let countdown=TOTAL_SECONDS;
+  const arc=document.getElementById('timerArc'), label=document.getElementById('otpCountdown');
+  arc.style.stroke='var(--accent)'; arc.style.strokeDashoffset='0';
+  label.textContent=countdown; label.style.color='var(--accent)';
+  if(otpTimer){clearInterval(otpTimer);otpTimer=null;}
+  otpTimer=setInterval(()=>{
+    countdown--;
+    label.textContent=countdown;
+    arc.style.strokeDashoffset=CIRCUMFERENCE*(1-countdown/TOTAL_SECONDS);
+    if(countdown<=5){ arc.style.stroke='var(--danger)'; label.style.color='var(--danger)'; }
+    if(countdown<=0){
+      clearInterval(otpTimer); otpTimer=null;
+      document.getElementById('otpOverlay').classList.remove('visible');
+      showStatus('⏱ OTP expired — please try again','error');
+      document.getElementById('loginBtn').disabled=false;
+    }
+  },1000);
+}
+
+function submitOTP() {
+  const otp=[...document.querySelectorAll('.otp-digit')].map(d=>d.value).join('');
+  if(otp.length<4) return;
+  if(otpTimer){clearInterval(otpTimer);otpTimer=null;}
+  fetch('http://localhost:5000/verify_otp',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({phone:otpPhone,otp})
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    document.getElementById('otpOverlay').classList.remove('visible');
+    if(res.status==='verified') showDashboard('OTP + Behavioral');
+    else {
+      showStatus('❌ Invalid OTP — Access Denied','error');
+      document.getElementById('loginBtn').disabled=false;
+    }
+  });
+}
+
+// ── Access Granted ─────────────────────────────────────────────────
+function showDashboard(method) {
+  document.getElementById('loginCard').style.display='none';
+  const screen=document.getElementById('accessScreen');
+  screen.classList.add('show');
+  startMatrix();
+  setTimeout(()=>document.getElementById('sweepLine').classList.add('run'), 300);
+  setTimeout(()=>document.getElementById('shieldWrap').classList.add('show'), 600);
+  setTimeout(()=>{
+    document.getElementById('accessTitle').classList.add('show');
+    document.getElementById('accessSub').classList.add('show');
+  }, 900);
+  setTimeout(()=>{
+    const threat = finalCpm>80?'NONE':finalCpm>40?'LOW':'MED';
+    const tColor  = finalCpm>80?'var(--success)':finalCpm>40?'var(--warn)':'var(--danger)';
+    document.getElementById('statCpm').textContent    = finalCpm.toFixed(0)+' CPM';
+    document.getElementById('statThreat').textContent = threat;
+    document.getElementById('statThreat').style.color = tColor;
+    document.getElementById('statMethod').textContent = method==='Behavioral'?'BIO':'OTP';
+    document.getElementById('statsGrid').classList.add('show');
+  }, 1100);
+  setTimeout(()=>{
+    const sid='SID-'+Math.random().toString(36).substr(2,8).toUpperCase();
+    document.getElementById('logSid').textContent=sid;
+    document.getElementById('logTime').textContent=new Date().toLocaleString();
+    document.getElementById('sessionLog').classList.add('show');
+  }, 1400);
+  setTimeout(()=>document.getElementById('btnLogout').classList.add('show'), 1700);
+  setTimeout(stopMatrix, 4000);
+}
+
+function logout() { location.reload(); }
+</script>
+</body>
+</html>
