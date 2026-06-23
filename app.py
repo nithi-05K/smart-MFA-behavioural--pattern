@@ -1,71 +1,89 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask import Flask, jsonify, render_template, request
 import pickle
 import numpy as np
-from twilio.rest import Client
 import random
 
 app = Flask(__name__)
-CORS(app)
-
-# Load model
-model = pickle.load(open("behavior_model.pkl", "rb"))
-
-# ---------------- TWILIO SETUP ----------------
-account_sid = "YOUR_SID"
-auth_token = "YOUR_TOKEN"
-twilio_number = "+12603466726"
-
-client = Client(account_sid, auth_token)
-
 otp_store = {}
 
-# ---------------- ML PREDICTION ----------------
+# Load trained model
+with open("behavior_model.pkl", "rb") as f:
+    model = pickle.load(f)
+
+# Home Page
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+# Prediction
 @app.route("/predict", methods=["POST"])
 def predict():
-    data = request.json
+    print("PREDICT ROUTE HIT")
 
-    features = [
-        data["cpm"],
-        data["dwell_avg"],
-        data["flight_avg"],
-        data["pressure_touch"],
-        data["scroll_x"],
-        data["scroll_y"],
-        data["tilt_angle"]
-    ]
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body is required"}), 400
 
-    final = np.array(features).reshape(1, -1)
-    prediction = model.predict(final)
+        cpm = float(data["cpm"])
+        dwell_avg = float(data["dwell_avg"])
+        flight_avg = float(data["flight_avg"])
+        pressure_touch = float(data["pressure_touch"])
+        scroll_x = float(data["scroll_x"])
+        scroll_y = float(data["scroll_y"])
+        tilt_angle = float(data["tilt_angle"])
 
-    return jsonify({"result": int(prediction[0])})
+        features = np.array([[
+            cpm,
+            dwell_avg,
+            flight_avg,
+            pressure_touch,
+            scroll_x,
+            scroll_y,
+            tilt_angle
+        ]])
 
-# ---------------- SEND OTP ----------------
+        prediction = model.predict(features)[0]
+        if hasattr(prediction, "item"):
+            prediction = prediction.item()
+
+        return jsonify({
+            "result": prediction
+        })
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/send_otp", methods=["POST"])
 def send_otp():
-    phone = request.json["phone"]
+    data = request.get_json()
+    if not data or not data.get("phone"):
+        return jsonify({"error": "Phone number is required"}), 400
 
+    phone = data["phone"]
     otp = str(random.randint(1000, 9999))
     otp_store[phone] = otp
+    print(f"OTP for {phone}: {otp}")
 
-    client.messages.create(
-        body=f"Your OTP is {otp}",
-        from_=twilio_number,
-        to=phone
-    )
+    return jsonify({"status": "sent"})
 
-    return jsonify({"message": "OTP sent"})
 
-# ---------------- VERIFY OTP ----------------
 @app.route("/verify_otp", methods=["POST"])
 def verify_otp():
-    phone = request.json["phone"]
-    otp = request.json["otp"]
+    data = request.get_json()
+    if not data or not data.get("phone") or not data.get("otp"):
+        return jsonify({"error": "Phone number and OTP are required"}), 400
+
+    phone = data["phone"]
+    otp = data["otp"]
 
     if otp_store.get(phone) == otp:
+        otp_store.pop(phone, None)
         return jsonify({"status": "verified"})
-    else:
-        return jsonify({"status": "failed"})
+
+    return jsonify({"status": "invalid"}), 401
 
 if __name__ == "__main__":
     app.run(debug=True)
