@@ -1,10 +1,17 @@
 from flask import Flask, jsonify, render_template, request
+import os
 import pickle
 import numpy as np
 import random
+from twilio.rest import Client
 
 app = Flask(__name__)
 otp_store = {}
+
+account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
+client = Client(account_sid, auth_token)
 
 # Load trained model
 with open("behavior_model.pkl", "rb") as f:
@@ -58,16 +65,41 @@ def predict():
 
 @app.route("/send_otp", methods=["POST"])
 def send_otp():
-    data = request.get_json()
-    if not data or not data.get("phone"):
-        return jsonify({"error": "Phone number is required"}), 400
+    try:
+        data = request.get_json()
+        if not data or not data.get("phone"):
+            return jsonify({"error": "Phone number is required"}), 400
 
-    phone = data["phone"]
-    otp = str(random.randint(1000, 9999))
-    otp_store[phone] = otp
-    print(f"OTP for {phone}: {otp}")
+        if not account_sid or not auth_token or not twilio_number:
+            return jsonify({"error": "Twilio environment variables are not configured"}), 500
 
-    return jsonify({"status": "sent"})
+        phone = data["phone"]
+        otp = str(random.randint(1000, 9999))
+        otp_store[phone] = otp
+
+        print("=== SEND OTP REQUEST ===")
+        print("Phone:", phone)
+        print("Twilio Number:", twilio_number)
+        print("SID Present:", bool(account_sid))
+        print("Token Present:", bool(auth_token))
+
+        message = client.messages.create(
+            body=f"Your Smart MFA OTP is: {otp}",
+            from_=twilio_number,
+            to=phone
+        )
+        print("Message SID:", message.sid)
+
+        return jsonify({
+            "status": "sent",
+            "message_sid": message.sid
+        })
+
+    except Exception as e:
+        import traceback
+        print("TWILIO ERROR:", str(e))
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/verify_otp", methods=["POST"])

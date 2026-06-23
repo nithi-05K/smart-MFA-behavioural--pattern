@@ -3,6 +3,5 @@ flask-cors
 numpy
 pandas
 scikit-learn
-joblib
-gunicorn
 twilio
+gunicorn

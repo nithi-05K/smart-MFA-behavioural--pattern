@@ -645,9 +645,24 @@ function verify() {
     loader.style.display='none';
     if(isSuspicious) {
       showStatus('⚠ Behavioral anomaly detected — OTP required','warn');
+      console.log('Sending /send_otp request:', {phone});
       fetch('/send_otp', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})
-      }).then(()=>openOTP(phone));
+      })
+      .then(async r=>{
+        console.log('/send_otp response status:', r.status, r.statusText);
+        const result = await r.json();
+        console.log('/send_otp response JSON:', result);
+        if(!r.ok) {
+          throw new Error(result.error || `OTP send failed with status ${r.status}`);
+        }
+        openOTP(phone);
+      })
+      .catch(err=>{
+        console.error('/send_otp failed:', err);
+        btn.disabled=false;
+        showStatus('âš  OTP SMS failed — check Twilio logs','error');
+      });
     } else {
       showDashboard('Behavioral');
     }
